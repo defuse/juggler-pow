@@ -183,7 +183,6 @@ void juggler_find_solution(const puzzle_t *puzzle, solution_t *solution)
         }
 
         /* Fill the buckets. */
-        // XXX: find the optimal calculation here
         // XXX: we should probably check index upper bounds.
         log_debug("    Filling the buckets");
         juint_t total_added = 0, prefix;
