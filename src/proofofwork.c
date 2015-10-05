@@ -33,7 +33,7 @@ int juggler_check_solution(const puzzle_t *puzzle, const solution_t *solution)
 
     /* The proof-of-work input selector must be within range. */
     // XXX: do the correct calculation
-    if (solution->selector >= (1 << (J_DIFFICULTY_BITS + 1))) {
+    if (solution->selector >= ((juint_t)1 << (J_DIFFICULTY_BITS + 1))) {
         log_debug("    The outer PoW input selector is too big.");
         return 0;
     }
@@ -41,7 +41,7 @@ int juggler_check_solution(const puzzle_t *puzzle, const solution_t *solution)
     /* Compute the full nonce. */
     uint8_t full_nonce[J_PUZZLE_SIZE + J_EXTRA_NONCE_SIZE];
     memcpy(full_nonce, puzzle->puzzle, J_PUZZLE_SIZE);
-    memcpy(full_nonce + J_PUZZLE_SIZE, solution->extra_nonce, J_EXTRA_NONCE_SIZE);
+    memcpy(full_nonce + J_PUZZLE_SIZE, (uint8_t *)&solution->extra_nonce, J_EXTRA_NONCE_SIZE);
 
     /* The given buckets must have been selected by the input selector. */
     juint_t prefixes[J_INPUT_BUCKETS];
@@ -56,7 +56,7 @@ int juggler_check_solution(const puzzle_t *puzzle, const solution_t *solution)
 
     /* Check that each bucket is valid. */
     for (int i = 0; i < J_INPUT_BUCKETS; i++) {
-        for (int j = 0; j < (1 << J_BUCKET_SIZE_BITS); j++) {
+        for (int j = 0; j < ((juint_t)1 << J_BUCKET_SIZE_BITS); j++) {
             /* Check that the hash actually starts with this bucket's prefix. */
             juint_t prefix = juggler_hash_prefix(
                 full_nonce,
@@ -96,7 +96,7 @@ int juggler_check_solution(const puzzle_t *puzzle, const solution_t *solution)
     for (
         juint_t preimage = 0;
         /* We get to this value of total_added exactly when all buckets are full. */
-        preimage < (1 << (J_MEMORY_BITS + 1));
+        preimage < ((juint_t)1 << (J_MEMORY_BITS + 1));
         preimage++
         ) {
 
@@ -114,7 +114,7 @@ int juggler_check_solution(const puzzle_t *puzzle, const solution_t *solution)
                 int valid = 0;
                 juint_t j = 0;
                 // XXX: We could do a binary search here, but is it worth it?
-                for (; j < (1 << J_BUCKET_SIZE_BITS); j++) {
+                for (; j < ((juint_t)1 << J_BUCKET_SIZE_BITS); j++) {
                     if (solution->buckets[i].indices[j] == preimage) {
                         valid = 1;
                         break;
@@ -156,115 +156,118 @@ void juggler_find_solution(const puzzle_t *puzzle, solution_t *solution)
 
     /* Start with a zero extra nonce. */
     log_debug("    Initializing the extra nonce...");
-    memset(solution->extra_nonce, 0, J_EXTRA_NONCE_SIZE);
+    solution->extra_nonce = 0;
 
     /* One bucket for every possible prefix. */
     log_debug("    Allocating bucket memory...");
-    bucket_t *buckets = malloc(sizeof(bucket_t) * (1 << J_PREFIX_BITS));
+    bucket_t *buckets = malloc(sizeof(bucket_t) * ((juint_t)1 << J_PREFIX_BITS));
     if (buckets == NULL) {
         log_fatal("Couldn't allocate enough bucket memory.");
     }
 
-    /* NOTE: We're re-using the 'prefix' field of bucket as the current number
-     * of elements in the bucket. The bucket's prefix is the same as its index
-     * in the array. */
-    log_debug("    Initializing bucket element counts...");
-    for (juint_t i = 0; i < (1 << J_PREFIX_BITS); i++) {
-        buckets[i].prefix = 0;
+    /* This outer loop increments extra_nonce and tries again in case we're
+     * unlucky and don't find a solution with the first value of extra_nonce. */
+    while (1) {
+        /* Compute the full nonce. */
+        log_debug("    Computing the full nonce...");
+        uint8_t full_nonce[J_PUZZLE_SIZE + J_EXTRA_NONCE_SIZE];
+        memcpy(full_nonce, solution->puzzle, J_PUZZLE_SIZE);
+        memcpy(full_nonce + J_PUZZLE_SIZE, (uint8_t *)&solution->extra_nonce, J_EXTRA_NONCE_SIZE);
+
+        /* Set all of the buckets to empty.
+         * NOTE: We're re-using the 'prefix' field of bucket as the current number
+         * of elements in the bucket. The bucket's prefix is the same as its index
+         * in the array. */
+        log_debug("    Initializing bucket element counts...");
+        for (juint_t i = 0; i < ((juint_t)1 << J_PREFIX_BITS); i++) {
+            buckets[i].prefix = 0;
+        }
+
+        /* Fill the buckets. */
+        // XXX: find the optimal calculation here
+        // XXX: we should probably check index upper bounds.
+        log_debug("    Filling the buckets");
+        juint_t total_added = 0, prefix;
+        for (
+            juint_t preimage = 0;
+            /* We get to this value of total_added exactly when all buckets are full. */
+            total_added < ((juint_t)1 << (J_PREFIX_BITS + J_BUCKET_SIZE_BITS)) && preimage < ((juint_t)1 << (J_MEMORY_BITS + 1));
+            preimage++
+            ) {
+            prefix = juggler_hash_prefix(
+                full_nonce,
+                (uint8_t *)&preimage,
+                sizeof(juint_t),
+                PURPOSE_GETPREFIX,
+                J_PREFIX_BITS
+            );
+            if (buckets[prefix].prefix < ((juint_t)1 << J_BUCKET_SIZE_BITS)) {
+                total_added += 1;
+                buckets[prefix].indices[buckets[prefix].prefix] = preimage;
+                buckets[prefix].prefix++;
+            } else {
+                /* Bucket is already full. Don't store this index anywhere. */
+                // XXX WAIT... an attack:
+                //      Can't the attacker just find one more than necessary for the bucket
+                //      and then permute that in/out with others??
+                //          Fix: We need to make a PRP output on the right number of bits so
+                //          that the number in each bucket is EXACT, i.e. if there are 2^16
+                //          buckets of size 2^10, then the PRP maps [0, 2^26) onto [0, 2^26)
+                //          in a one-to-one, onto, and *hard-to-invert* way.
+                // (An alternate fix is to make the client computationally verify
+                // the exact counts, and always include all of them. But then the
+                // client requires high CPU (but still low memory))
+            }
+
+            if (total_added % 100000 == 0) {
+                log_debug("    Added (another) 100000 preimages.");
+            }
+        }
+
+        if (total_added != ((juint_t)1 << (J_PREFIX_BITS + J_BUCKET_SIZE_BITS))) {
+            log_debug("Didn't fill all of the buckets.");
+            /* Unlucky! Try again with the next extra nonce. */
+            solution->extra_nonce++;
+            continue;
+        }
+
+        /* Find a proof of work solution where the input is buckets. */
+        log_debug("    Finding a proof-of-work solution...");
+        juint_t prefixes[J_INPUT_BUCKETS];
+        for (solution->selector = 0; solution->selector < ((juint_t)1 << (J_DIFFICULTY_BITS)); solution->selector++) {
+            juggler_select_buckets(full_nonce, solution->selector, prefixes);
+
+            /* Create the potential proof-of-work solution (the hash input) */
+            for (int i = 0; i < J_INPUT_BUCKETS; i++) {
+                memcpy(&solution->buckets[i], &buckets[prefixes[i]], sizeof(bucket_t));
+                /* Set the prefix to the correct value. Before, we were using it to
+                * store the count. In the hash it should be the prefix. */
+                solution->buckets[i].prefix = prefixes[i];
+            }
+
+            /* Check if we found a solution to the proof-of-work. */
+            juint_t pow = juggler_hash_prefix(
+                full_nonce,
+                (uint8_t *)solution->buckets,
+                sizeof(bucket_t) * J_INPUT_BUCKETS,
+                PURPOSE_PROOFWORK,
+                J_DIFFICULTY_BITS
+            );
+
+            if (pow == 0) {
+                free(buckets);
+                return;
+            }
+
+            if (solution->selector % 100000 == 0) {
+                log_debug("    Tried another 100000 selectors.");
+            }
+        }
+
+        /* Unlucky! Didn't find a solution. Try again with the next extra nonce. */
+        log_debug("    Didn't find a proof-of-work solution.");
+        solution->extra_nonce++;
     }
-
-    // XXX: re-iterate on failure with a new extra_nonce.
-
-    /* Compute the full nonce. */
-    log_debug("    Computing the full nonce...");
-    uint8_t full_nonce[J_PUZZLE_SIZE + J_EXTRA_NONCE_SIZE];
-    memcpy(full_nonce, solution->puzzle, J_PUZZLE_SIZE);
-    memcpy(full_nonce + J_PUZZLE_SIZE, solution->extra_nonce, J_EXTRA_NONCE_SIZE);
-
-    /* Fill the buckets. */
-    // XXX: find the optimal calculation here
-    // XXX: we should probably check index upper bounds.
-    log_debug("    Filling the buckets");
-    juint_t total_added = 0, prefix;
-    for (
-        juint_t preimage = 0;
-        /* We get to this value of total_added exactly when all buckets are full. */
-        total_added < 1 << (J_PREFIX_BITS + J_BUCKET_SIZE_BITS) && preimage < (1 << (J_MEMORY_BITS + 1));
-        preimage++
-        ) {
-        prefix = juggler_hash_prefix(
-            full_nonce,
-            (uint8_t *)&preimage,
-            sizeof(juint_t),
-            PURPOSE_GETPREFIX,
-            J_PREFIX_BITS
-        );
-        if (buckets[prefix].prefix < (1 << J_BUCKET_SIZE_BITS)) {
-            total_added += 1;
-            buckets[prefix].indices[buckets[prefix].prefix] = preimage;
-            buckets[prefix].prefix++;
-        } else {
-            /* Bucket is already full. Don't store this index anywhere. */
-            // XXX WAIT... an attack:
-            //      Can't the attacker just find one more than necessary for the bucket 
-            //      and then permute that in/out with others??
-            //          Fix: We need to make a PRP output on the right number of bits so
-            //          that the number in each bucket is EXACT, i.e. if there are 2^16
-            //          buckets of size 2^10, then the PRP maps [0, 2^26) onto [0, 2^26)
-            //          in a one-to-one, onto, and *hard-to-invert* way.
-            // (An alternate fix is to make the client computationally verify
-            // the exact counts, and always include all of them. But then the
-            // client requires high CPU (but still low memory))
-        }
-
-        if (total_added % 100000 == 0) {
-            log_debug("    Added (another) 100000 preimages.");
-        }
-    }
-
-    if (total_added != (1 << (J_PREFIX_BITS + J_BUCKET_SIZE_BITS))) {
-        log_fatal("Didn't fill all of the buckets.");
-    }
-
-    /* Find a proof of work solution where the input is buckets. */
-    log_debug("    Finding a proof-of-work solution...");
-    juint_t prefixes[J_INPUT_BUCKETS];
-    for (solution->selector = 0; solution->selector < (1 << (J_DIFFICULTY_BITS + 1)); solution->selector++) {
-        juggler_select_buckets(full_nonce, solution->selector, prefixes);
-
-        /* Create the potential proof-of-work solution (the hash input) */
-        for (int i = 0; i < J_INPUT_BUCKETS; i++) {
-            memcpy(&solution->buckets[i], &buckets[prefixes[i]], sizeof(bucket_t));
-            /* Set the prefix to the correct value. Before, we were using it to
-             * store the count. In the hash it should be the prefix. */
-            solution->buckets[i].prefix = prefixes[i];
-        }
-
-        /* Check if we found a solution to the proof-of-work. */
-        juint_t pow = juggler_hash_prefix(
-            full_nonce,
-            (uint8_t *)solution->buckets,
-            sizeof(bucket_t) * J_INPUT_BUCKETS,
-            PURPOSE_PROOFWORK,
-            J_DIFFICULTY_BITS
-        );
-
-        if (pow == 0) {
-            free(buckets);
-            return;
-        }
-
-        // XXX: for some reason adding printf statements in here makes it fail!?
-
-        if (solution->selector % 100000 == 0) {
-            log_debug("    Tried another 100000 selectors.");
-        }
-    }
-
-    printf("WTF: %d\n", (int)solution->selector);
-
-    free(buckets);
-    log_fatal("Failed to find a solution (FIXME).");
 }
 
 juint_t juggler_hash_prefix(const uint8_t *full_nonce, const uint8_t *msg, size_t len, const uint8_t *purpose, size_t bits)
