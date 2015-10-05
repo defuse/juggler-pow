@@ -42,6 +42,7 @@ int main(int argc, char **argv)
 
     if (ret) {
         printf("Solution found.\n");
+        juggler_print_solution(&solution);
     } else {
         printf("Solution is wrong (BUG!)\n");
     }

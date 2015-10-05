@@ -32,7 +32,7 @@ int juggler_check_solution(const puzzle_t *puzzle, const solution_t *solution)
     }
 
     /* The proof-of-work input selector must be within range. */
-    if (solution->selector >= ((juint_t)1 << (J_DIFFICULTY_BITS))) {
+    if (solution->selector >= ((juint_t)1 << (J_DIFFICULTY_BITS + 1))) {
         log_debug("    The outer PoW input selector is too big.");
         return 0;
     }
@@ -108,12 +108,15 @@ int juggler_check_solution(const puzzle_t *puzzle, const solution_t *solution)
             J_PREFIX_BITS
         );
 
+        // Don't bother optimizing the following loop. The hashing is the
+        // bottleneck. Commenting out the code below doesn't appear to even
+        // affect the performance.
+
         for (int i = 0; i < J_INPUT_BUCKETS; i++) {
             if (prefix == solution->buckets[i].prefix) {
                 /* It must be either in the list, or greater than the last one. */
                 int valid = 0;
                 juint_t j = 0;
-                // XXX: We could do a binary search here, but is it worth it?
                 for (; j < ((juint_t)1 << J_BUCKET_SIZE_BITS); j++) {
                     if (solution->buckets[i].indices[j] == preimage) {
                         valid = 1;
@@ -234,7 +237,7 @@ void juggler_find_solution(const puzzle_t *puzzle, solution_t *solution)
         /* Find a proof of work solution where the input is buckets. */
         log_debug("    Finding a proof-of-work solution...");
         juint_t prefixes[J_INPUT_BUCKETS];
-        for (solution->selector = 0; solution->selector < ((juint_t)1 << (J_DIFFICULTY_BITS)); solution->selector++) {
+        for (solution->selector = 0; solution->selector < ((juint_t)1 << (J_DIFFICULTY_BITS + 1)); solution->selector++) {
             juggler_select_buckets(full_nonce, solution->selector, prefixes);
 
             /* Create the potential proof-of-work solution (the hash input) */
@@ -317,4 +320,12 @@ void juggler_select_buckets(const uint8_t *full_nonce, juint_t selector, juint_t
             J_PREFIX_BITS
         );
     }
+}
+
+void juggler_print_solution(solution_t *solution)
+{
+    for (size_t i = 0; i < sizeof(solution_t); i++) {
+        printf("%02x", ((uint8_t *)solution)[i]);
+    }
+    printf("\n");
 }
