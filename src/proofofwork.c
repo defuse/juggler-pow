@@ -249,6 +249,7 @@ void juggler_find_solution(const puzzle_t *puzzle, solution_t *solution)
         );
 
         if (pow == 0) {
+            free(buckets);
             return;
         }
 
@@ -261,6 +262,7 @@ void juggler_find_solution(const puzzle_t *puzzle, solution_t *solution)
 
     printf("WTF: %d\n", (int)solution->selector);
 
+    free(buckets);
     log_fatal("Failed to find a solution (FIXME).");
 }
 
