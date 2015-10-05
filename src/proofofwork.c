@@ -275,13 +275,13 @@ void juggler_find_solution(const puzzle_t *puzzle, solution_t *solution)
 
 juint_t juggler_hash_prefix(const uint8_t *full_nonce, const uint8_t *msg, size_t len, const uint8_t *purpose, size_t bits)
 {
-    uint8_t hash[SHA256_DIGEST_LENGTH];
-    SHA256_CTX sha256;
-    SHA256_Init(&sha256);
-    SHA256_Update(&sha256, full_nonce, J_PUZZLE_SIZE + J_EXTRA_NONCE_SIZE);
-    SHA256_Update(&sha256, purpose, strlen(purpose));
-    SHA256_Update(&sha256, msg, len);
-    SHA256_Final(hash, &sha256);
+    uint8_t hash[SHA_DIGEST_LENGTH];
+    SHA_CTX sha256;
+    SHA1_Init(&sha256);
+    SHA1_Update(&sha256, full_nonce, J_PUZZLE_SIZE + J_EXTRA_NONCE_SIZE);
+    SHA1_Update(&sha256, purpose, strlen(purpose));
+    SHA1_Update(&sha256, msg, len);
+    SHA1_Final(hash, &sha256);
 
     assert(bits <= 64);
 
