@@ -125,6 +125,7 @@ int juggler_check_solution(const puzzle_t *puzzle, const solution_t *solution)
                     log_debug("    Preimage selection trickery!");
                     return 0;
                 }
+                break;
             }
         }
 
