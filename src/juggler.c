@@ -7,6 +7,13 @@ int main(int argc, char **argv)
     puzzle_t puzzle;
     solution_t solution;
 
+    /* We use pointer hacks to hash the buckets. If they contain padding, the
+     * proof-of-work function becomes insecure, because the prover can twiddle
+     * the padding values to get more proof-of-work input combinations. */
+    if (sizeof(bucket_t) != sizeof(juint_t) * (1 + (1 << J_BUCKET_SIZE_BITS))) {
+        printf("WARNING: bucket_t struct contains padding!");
+    }
+
     printf("Puzzle size: %zu\n", sizeof(puzzle_t));
     printf("Solution size: %zu\n", sizeof(solution));
 

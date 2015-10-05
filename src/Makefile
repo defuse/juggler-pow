@@ -8,7 +8,7 @@ else
 	CFLAGS += -O3 -DNDEBUG
 endif
 
-juggler: proofofwork.o log.o
+juggler: proofofwork.o log.o juggler.c
 	gcc $(CFLAGS) -lcrypto proofofwork.o log.o juggler.c -o juggler
 
 proofofwork.o: proofofwork.c proofofwork.h log.h
