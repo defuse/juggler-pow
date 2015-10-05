@@ -86,20 +86,21 @@ int juggler_check_solution(const puzzle_t *puzzle, const solution_t *solution)
     /* Check that the preimage indices were unambiguously chosen. */
     /* Unfortunately, this CPU-expensive operation is required to prevent an
      * attack (see one of the XXX coments in the solver code). */
-
-    // XXX: this could be optimized by saving the max preimage in the solution
-    // and stopping at that value (and doing whatever else is required to make
-    // it consistent)
     log_debug("    Looking for preimage selection trickery...");
-    juint_t total_added = 0, prefix;
-    for (
-        juint_t preimage = 0;
-        /* We get to this value of total_added exactly when all buckets are full. */
-        preimage < ((juint_t)1 << (J_MEMORY_BITS + 1));
-        preimage++
-        ) {
 
-        prefix = juggler_hash_prefix(
+    /* Calculate the maximum preimage, so we can stop checking ASAP. */
+    juint_t max_preimage = 0;
+    for (int i = 0; i < J_INPUT_BUCKETS; i++) {
+        for (int j = 0; j < ((juint_t)1 << J_BUCKET_SIZE_BITS); j++) {
+            if (solution->buckets[i].indices[j] > max_preimage) {
+                max_preimage = solution->buckets[i].indices[j];
+            }
+        }
+    }
+
+    for (juint_t preimage = 0; preimage <= max_preimage; preimage++) {
+
+        juint_t prefix = juggler_hash_prefix(
             full_nonce,
             (uint8_t *)&preimage,
             sizeof(juint_t),
