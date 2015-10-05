@@ -43,7 +43,7 @@ int juggler_check_solution(const puzzle_t *puzzle, const solution_t *solution)
     memcpy(full_nonce + J_PUZZLE_SIZE, solution->extra_nonce, J_EXTRA_NONCE_SIZE);
 
     /* The given buckets must have been selected by the input selector. */
-    uint64_t prefixes[J_INPUT_BUCKETS];
+    juint_t prefixes[J_INPUT_BUCKETS];
     juggler_select_buckets(full_nonce, solution->selector, prefixes);
 
     for (int i = 0; i < J_INPUT_BUCKETS; i++) {
@@ -57,10 +57,10 @@ int juggler_check_solution(const puzzle_t *puzzle, const solution_t *solution)
     for (int i = 0; i < J_INPUT_BUCKETS; i++) {
         for (int j = 0; j < (1 << J_BUCKET_SIZE_BITS); j++) {
             /* Check that the hash actually starts with this bucket's prefix. */
-            uint64_t prefix = juggler_hash_prefix(
+            juint_t prefix = juggler_hash_prefix(
                 full_nonce,
                 (uint8_t *)&(solution->buckets[i].indices[j]),
-                sizeof(uint64_t),
+                sizeof(juint_t),
                 PURPOSE_GETPREFIX,
                 J_PREFIX_BITS
             );
@@ -91,9 +91,9 @@ int juggler_check_solution(const puzzle_t *puzzle, const solution_t *solution)
     // and stopping at that value (and doing whatever else is required to make
     // it consistent)
     log_debug("    Looking for preimage selection trickery...");
-    uint64_t total_added = 0, prefix;
+    juint_t total_added = 0, prefix;
     for (
-        uint64_t preimage = 0;
+        juint_t preimage = 0;
         /* We get to this value of total_added exactly when all buckets are full. */
         preimage < (1 << (J_MEMORY_BITS + 1));
         preimage++
@@ -102,7 +102,7 @@ int juggler_check_solution(const puzzle_t *puzzle, const solution_t *solution)
         prefix = juggler_hash_prefix(
             full_nonce,
             (uint8_t *)&preimage,
-            sizeof(uint64_t),
+            sizeof(juint_t),
             PURPOSE_GETPREFIX,
             J_PREFIX_BITS
         );
@@ -111,7 +111,7 @@ int juggler_check_solution(const puzzle_t *puzzle, const solution_t *solution)
             if (prefix == solution->buckets[i].prefix) {
                 /* It must be either in the list, or greater than the last one. */
                 int valid = 0;
-                uint64_t j = 0;
+                juint_t j = 0;
                 // XXX: We could do a binary search here, but is it worth it?
                 for (; j < (1 << J_BUCKET_SIZE_BITS); j++) {
                     if (solution->buckets[i].indices[j] == preimage) {
@@ -130,7 +130,7 @@ int juggler_check_solution(const puzzle_t *puzzle, const solution_t *solution)
     }
 
     /* Check that the buckets are a solution to the proof-of-work. */
-    uint64_t pow = juggler_hash_prefix(
+    juint_t pow = juggler_hash_prefix(
         full_nonce,
         (uint8_t *)solution->buckets,
         sizeof(bucket_t) * J_INPUT_BUCKETS,
@@ -168,7 +168,7 @@ void juggler_find_solution(const puzzle_t *puzzle, solution_t *solution)
      * of elements in the bucket. The bucket's prefix is the same as its index
      * in the array. */
     log_debug("    Initializing bucket element counts...");
-    for (uint64_t i = 0; i < (1 << J_PREFIX_BITS); i++) {
+    for (juint_t i = 0; i < (1 << J_PREFIX_BITS); i++) {
         buckets[i].prefix = 0;
     }
 
@@ -184,9 +184,9 @@ void juggler_find_solution(const puzzle_t *puzzle, solution_t *solution)
     // XXX: find the optimal calculation here
     // XXX: we should probably check index upper bounds.
     log_debug("    Filling the buckets");
-    uint64_t total_added = 0, prefix;
+    juint_t total_added = 0, prefix;
     for (
-        uint64_t preimage = 0;
+        juint_t preimage = 0;
         /* We get to this value of total_added exactly when all buckets are full. */
         total_added < 1 << (J_PREFIX_BITS + J_BUCKET_SIZE_BITS) && preimage < (1 << (J_MEMORY_BITS + 1));
         preimage++
@@ -194,7 +194,7 @@ void juggler_find_solution(const puzzle_t *puzzle, solution_t *solution)
         prefix = juggler_hash_prefix(
             full_nonce,
             (uint8_t *)&preimage,
-            sizeof(uint64_t),
+            sizeof(juint_t),
             PURPOSE_GETPREFIX,
             J_PREFIX_BITS
         );
@@ -227,7 +227,7 @@ void juggler_find_solution(const puzzle_t *puzzle, solution_t *solution)
 
     /* Find a proof of work solution where the input is buckets. */
     log_debug("    Finding a proof-of-work solution...");
-    uint64_t prefixes[J_INPUT_BUCKETS];
+    juint_t prefixes[J_INPUT_BUCKETS];
     for (solution->selector = 0; solution->selector < (1 << (J_DIFFICULTY_BITS + 1)); solution->selector++) {
         juggler_select_buckets(full_nonce, solution->selector, prefixes);
 
@@ -237,11 +237,10 @@ void juggler_find_solution(const puzzle_t *puzzle, solution_t *solution)
             /* Set the prefix to the correct value. Before, we were using it to
              * store the count. In the hash it should be the prefix. */
             solution->buckets[i].prefix = prefixes[i];
-            // XXX
         }
 
         /* Check if we found a solution to the proof-of-work. */
-        uint64_t pow = juggler_hash_prefix(
+        juint_t pow = juggler_hash_prefix(
             full_nonce,
             (uint8_t *)solution->buckets,
             sizeof(bucket_t) * J_INPUT_BUCKETS,
@@ -265,7 +264,7 @@ void juggler_find_solution(const puzzle_t *puzzle, solution_t *solution)
     log_fatal("Failed to find a solution (FIXME).");
 }
 
-uint64_t juggler_hash_prefix(const uint8_t *full_nonce, const uint8_t *msg, size_t len, const uint8_t *purpose, size_t bits)
+juint_t juggler_hash_prefix(const uint8_t *full_nonce, const uint8_t *msg, size_t len, const uint8_t *purpose, size_t bits)
 {
     // XXX: this doesn't use the full_nonce !
     uint8_t hash[SHA256_DIGEST_LENGTH];
@@ -275,7 +274,7 @@ uint64_t juggler_hash_prefix(const uint8_t *full_nonce, const uint8_t *msg, size
     SHA256_Update(&sha256, msg, len);
     SHA256_Final(hash, &sha256);
 
-    uint64_t prefix = 0;
+    juint_t prefix = 0;
     // XXX: I'm lazy... this actually computes the suffix!
     for (int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
         prefix <<= 8;
@@ -284,21 +283,21 @@ uint64_t juggler_hash_prefix(const uint8_t *full_nonce, const uint8_t *msg, size
     return prefix & ((1 << bits) - 1);
 }
 
-void juggler_select_buckets(const uint8_t *full_nonce, uint64_t selector, uint64_t *prefixes)
+void juggler_select_buckets(const uint8_t *full_nonce, juint_t selector, juint_t *prefixes)
 {
     // XXX: This can be made more efficient. Instead of calling the hash
     // function for each one, we can use up all the bits of the hash function to
     // select multiple prefixes. If we switch to blake2, then we can set the
     // output length to be just right.
-    uint8_t msg[sizeof(uint64_t) + sizeof(uint64_t)];
-    memcpy(msg, (uint8_t *)&selector, sizeof(uint64_t));
+    uint8_t msg[sizeof(juint_t) + sizeof(juint_t)];
+    memcpy(msg, (uint8_t *)&selector, sizeof(juint_t));
 
-    for (uint64_t i = 0; i < J_INPUT_BUCKETS; i++) {
-        memcpy(msg + sizeof(uint64_t), (uint8_t *)&i, sizeof(uint64_t));
+    for (juint_t i = 0; i < J_INPUT_BUCKETS; i++) {
+        memcpy(msg + sizeof(juint_t), (uint8_t *)&i, sizeof(juint_t));
         prefixes[i] = juggler_hash_prefix(
             full_nonce,
             msg,
-            sizeof(uint64_t) + sizeof(uint64_t),
+            sizeof(juint_t) + sizeof(juint_t),
             PURPOSE_SELECTION,
             J_PREFIX_BITS
         );

@@ -7,6 +7,9 @@ int main(int argc, char **argv)
     puzzle_t puzzle;
     solution_t solution;
 
+    printf("Puzzle size: %zu\n", sizeof(puzzle_t));
+    printf("Solution size: %zu\n", sizeof(solution));
+
     juggler_create_puzzle(&puzzle);
     juggler_find_solution(&puzzle, &solution);
 
