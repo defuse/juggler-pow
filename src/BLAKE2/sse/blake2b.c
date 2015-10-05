@@ -294,15 +294,6 @@ static inline int blake2b_compress( blake2b_state *S, const uint8_t block[BLAKE2
   ROUND( 0 );
   ROUND( 1 );
   ROUND( 2 );
-  ROUND( 3 );
-  ROUND( 4 );
-  ROUND( 5 );
-  ROUND( 6 );
-  ROUND( 7 );
-  ROUND( 8 );
-  ROUND( 9 );
-  ROUND( 10 );
-  ROUND( 11 );
   row1l = _mm_xor_si128( row3l, row1l );
   row1h = _mm_xor_si128( row3h, row1h );
   STOREU( &S->h[0], _mm_xor_si128( LOADU( &S->h[0] ), row1l ) );
