@@ -23,7 +23,6 @@
     typedef uint32_t juint_t;
 #endif
 
-// XXX: need to ensure this struct is packed correctly (because pointer hax)
 typedef struct Bucket {
     juint_t prefix;
     juint_t indices[1 << J_BUCKET_SIZE_BITS];
