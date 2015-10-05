@@ -32,8 +32,7 @@ int juggler_check_solution(const puzzle_t *puzzle, const solution_t *solution)
     }
 
     /* The proof-of-work input selector must be within range. */
-    // XXX: do the correct calculation
-    if (solution->selector >= ((juint_t)1 << (J_DIFFICULTY_BITS + 1))) {
+    if (solution->selector >= ((juint_t)1 << (J_DIFFICULTY_BITS))) {
         log_debug("    The outer PoW input selector is too big.");
         return 0;
     }
