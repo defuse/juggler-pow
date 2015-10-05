@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <assert.h>
 #include <openssl/sha.h>
 
 #include "log.h"
@@ -268,21 +269,30 @@ void juggler_find_solution(const puzzle_t *puzzle, solution_t *solution)
 
 juint_t juggler_hash_prefix(const uint8_t *full_nonce, const uint8_t *msg, size_t len, const uint8_t *purpose, size_t bits)
 {
-    // XXX: this doesn't use the full_nonce !
     uint8_t hash[SHA256_DIGEST_LENGTH];
     SHA256_CTX sha256;
     SHA256_Init(&sha256);
+    SHA256_Update(&sha256, full_nonce, J_PUZZLE_SIZE + J_EXTRA_NONCE_SIZE);
     SHA256_Update(&sha256, purpose, strlen(purpose));
     SHA256_Update(&sha256, msg, len);
     SHA256_Final(hash, &sha256);
 
+    assert(bits <= 64);
+
     juint_t prefix = 0;
-    // XXX: I'm lazy... this actually computes the suffix!
-    for (int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
+
+    /* Take just as many bytes as we need. */
+    for (int i = 0; i < (bits + 8 - 1) / 8; i++) {
         prefix <<= 8;
         prefix ^= hash[i];
     }
-    return prefix & ((1 << bits) - 1);
+
+    /* Shift out the few extra bits in the last byte. */
+    if (bits % 8 != 0) {
+        prefix = prefix >> (8 - (bits % 8));
+    }
+
+    return prefix;
 }
 
 void juggler_select_buckets(const uint8_t *full_nonce, juint_t selector, juint_t *prefixes)

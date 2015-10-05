@@ -1,6 +1,12 @@
 all: juggler
 
-CFLAGS = -O3
+CFLAGS = -std=c99
+
+ifeq ($(DEBUG),1)
+	CFLAGS += -O0
+else
+	CFLAGS += -O3 -DNDEBUG
+endif
 
 juggler: proofofwork.o log.o
 	gcc $(CFLAGS) -lcrypto proofofwork.o log.o juggler.c -o juggler
@@ -14,4 +20,4 @@ log.o: log.c log.h
 clean:
 	rm -f log.o proofofwork.o juggler
 
-.PHONY: all
+.PHONY: all clean

@@ -4,11 +4,11 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#define J_PREFIX_BITS 18
-#define J_BUCKET_SIZE_BITS 10
+#define J_PREFIX_BITS 17
+#define J_BUCKET_SIZE_BITS 9
 #define J_MEMORY_BITS (J_PREFIX_BITS + J_BUCKET_SIZE_BITS)
 // TODO: What exactly is the signifcance of this parameter?
-#define J_DIFFICULTY_BITS 20
+#define J_DIFFICULTY_BITS 18
 #define J_INPUT_BUCKETS 4
 #define J_PUZZLE_SIZE 32
 #define J_EXTRA_NONCE_SIZE 32
