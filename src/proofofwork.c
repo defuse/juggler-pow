@@ -277,13 +277,13 @@ void juggler_find_solution(const puzzle_t *puzzle, solution_t *solution)
     }
 }
 
-juint_t juggler_hash_prefix(const uint8_t *full_nonce, const uint8_t *msg, size_t len, const uint8_t *purpose, size_t bits)
+juint_t juggler_hash_prefix(const uint8_t *full_nonce, const uint8_t *msg, size_t len, const char *purpose, size_t bits)
 {
     uint8_t hash[8];
     blake2b_state S[1];
     blake2b_init(S, 8);
     blake2b_update(S, full_nonce, J_PUZZLE_SIZE + J_EXTRA_NONCE_SIZE);
-    blake2b_update(S, purpose, strlen(purpose));
+    blake2b_update(S, (uint8_t *)purpose, strlen(purpose));
     blake2b_update(S, msg, len);
     blake2b_final(S, hash, 8);
 

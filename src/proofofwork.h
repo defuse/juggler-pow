@@ -4,8 +4,8 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#define J_PREFIX_BITS 19
-#define J_BUCKET_SIZE_BITS 7
+#define J_PREFIX_BITS 21
+#define J_BUCKET_SIZE_BITS 6
 #define J_MEMORY_BITS (J_PREFIX_BITS + J_BUCKET_SIZE_BITS)
 // XXX: This is important for security. Prover can pre-compute the prefixes
 // they'll need to search the PoW space, and only compute those. Thus this is
@@ -49,7 +49,7 @@ int juggler_check_solution(const puzzle_t *puzzle, const solution_t *solution);
 void juggler_find_solution(const puzzle_t *puzzle, solution_t *solution);
 void juggler_print_solution(solution_t *solution);
 
-juint_t juggler_hash_prefix(const uint8_t *full_nonce, const uint8_t *msg, size_t len, const uint8_t *purpose, size_t bits);
+juint_t juggler_hash_prefix(const uint8_t *full_nonce, const uint8_t *msg, size_t len, const char *purpose, size_t bits);
 void juggler_select_buckets(const uint8_t *full_nonce, juint_t selector, juint_t *prefixes);
 
 #endif
