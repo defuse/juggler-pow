@@ -27,3 +27,11 @@ If you want to know how it works, look at the code. Sorry I'm tired and would
 rather sleep than write up an English explanation right now.
 
 Report bugs/ideas by opening GitHub issues.
+
+Related Work
+-------------
+
+The idea for this proof-of-work puzzle came from my attempts to
+understand/break:
+
+- [Asymmetric proof-of-work based on the Generalized Birthday problem](https://eprint.iacr.org/2015/946.pdf)
