@@ -17,8 +17,8 @@ as the hash function on my AMD FX-8370:
 - 0.5GB: 90 seconds proof, 20 seconds verify.
 - 1.0GB: 180 seconds proof, 40 seconds verify.
 
-Proof sizes are rather large, at 4152 bytes. But the size is tunable, at the
-expense of (I'm guessing) TMTO resistance.
+Proof sizes are rather large, ranging from 1KB to 8KB depending on the
+parameters. The size is tunable, trading off (I'm guessing) TMTO resistance.
 
 I haven't made any attempt to tune the parameters or even make them consistent
 with each other, so the actual performance could be much better or much worse.
