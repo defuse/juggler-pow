@@ -90,6 +90,11 @@ int juggler_check_solution(const puzzle_t *puzzle, const solution_t *solution)
     log_debug("    Looking for preimage selection trickery...");
 
     /* Calculate the maximum preimage, so we can stop checking ASAP. */
+    /* Since we're computing the maximum from untrusted data, it's important
+     * that this step come *after* the one above. Otherwise, the prover could
+     * DoS this code by specifying an insanely-high maximum value. XXX: But
+     * could the prover just offset all their indices by some constant value to
+     * force us to do more work here? */
     juint_t max_preimage = 0;
     for (int i = 0; i < J_INPUT_BUCKETS; i++) {
         for (int j = 0; j < ((juint_t)1 << J_BUCKET_SIZE_BITS); j++) {
