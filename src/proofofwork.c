@@ -58,13 +58,7 @@ int juggler_check_solution(const puzzle_t *puzzle, const solution_t *solution)
     for (int i = 0; i < J_INPUT_BUCKETS; i++) {
         for (int j = 0; j < ((juint_t)1 << J_BUCKET_SIZE_BITS); j++) {
             /* Check that the hash actually starts with this bucket's prefix. */
-            juint_t prefix = juggler_hash_prefix(
-                full_nonce,
-                (uint8_t *)&(solution->buckets[i].indices[j]),
-                sizeof(juint_t),
-                PURPOSE_GETPREFIX,
-                J_PREFIX_BITS
-            );
+            juint_t prefix = juggler_hash_prefix(full_nonce, solution->buckets[i].indices[j]);
 
             if (prefix != solution->buckets[i].prefix) {
                 log_debug("    Element in a bucket does not have its prefix.");
@@ -105,14 +99,7 @@ int juggler_check_solution(const puzzle_t *puzzle, const solution_t *solution)
     }
 
     for (juint_t preimage = 0; preimage <= max_preimage; preimage++) {
-
-        juint_t prefix = juggler_hash_prefix(
-            full_nonce,
-            (uint8_t *)&preimage,
-            sizeof(juint_t),
-            PURPOSE_GETPREFIX,
-            J_PREFIX_BITS
-        );
+        juint_t prefix = juggler_hash_prefix(full_nonce, preimage);
 
         // Don't bother optimizing the following loop. The hashing is the
         // bottleneck. Commenting out the code below doesn't appear to even
@@ -141,13 +128,14 @@ int juggler_check_solution(const puzzle_t *puzzle, const solution_t *solution)
     }
 
     /* Check that the buckets are a solution to the proof-of-work. */
-    juint_t pow = juggler_hash_prefix(
-        full_nonce,
-        (uint8_t *)solution->buckets,
-        sizeof(bucket_t) * J_INPUT_BUCKETS,
-        PURPOSE_PROOFWORK,
-        J_DIFFICULTY_BITS
-    );
+    juint_t pow;
+    blake2b_state S[1];
+    blake2b_init(S, sizeof(juint_t));
+    blake2b_update(S, full_nonce, J_PUZZLE_SIZE + J_EXTRA_NONCE_SIZE);
+    blake2b_update(S, (uint8_t *)PURPOSE_PROOFWORK, strlen(PURPOSE_PROOFWORK));
+    blake2b_update(S, (uint8_t *)solution->buckets, sizeof(bucket_t) * J_INPUT_BUCKETS);
+    blake2b_final(S, (uint8_t *)&pow, sizeof(juint_t));
+    pow = pow & ((1 << J_DIFFICULTY_BITS) - 1);
 
     if (pow != 0) {
         log_debug("    Not a solution to the hashcash proof of work!");
@@ -203,13 +191,7 @@ void juggler_find_solution(const puzzle_t *puzzle, solution_t *solution)
             total_added < ((juint_t)1 << (J_PREFIX_BITS + J_BUCKET_SIZE_BITS)) && preimage < ((juint_t)1 << (J_MEMORY_BITS + 1));
             preimage++
             ) {
-            prefix = juggler_hash_prefix(
-                full_nonce,
-                (uint8_t *)&preimage,
-                sizeof(juint_t),
-                PURPOSE_GETPREFIX,
-                J_PREFIX_BITS
-            );
+            prefix = juggler_hash_prefix(full_nonce, preimage);
             if (buckets[prefix].prefix < ((juint_t)1 << J_BUCKET_SIZE_BITS)) {
                 total_added += 1;
                 buckets[prefix].indices[buckets[prefix].prefix] = preimage;
@@ -249,24 +231,26 @@ void juggler_find_solution(const puzzle_t *puzzle, solution_t *solution)
         /* Find a proof of work solution where the input is buckets. */
         log_debug("    Finding a proof-of-work solution...");
         juint_t prefixes[J_INPUT_BUCKETS];
+        blake2b_state S[1];
         for (solution->selector = 0; solution->selector < ((juint_t)1 << (J_DIFFICULTY_BITS + 1)); solution->selector++) {
             juggler_select_buckets(full_nonce, solution->selector, prefixes);
 
-            /* Create the potential proof-of-work solution (the hash input) */
-            for (int i = 0; i < J_INPUT_BUCKETS; i++) {
-                memcpy(&solution->buckets[i], &buckets[prefixes[i]], sizeof(bucket_t));
-            }
+            juint_t pow;
+            blake2b_init(S, sizeof(juint_t));
+            blake2b_update(S, full_nonce, J_PUZZLE_SIZE + J_EXTRA_NONCE_SIZE);
+            blake2b_update(S, (uint8_t *)PURPOSE_PROOFWORK, strlen(PURPOSE_PROOFWORK));
 
-            /* Check if we found a solution to the proof-of-work. */
-            juint_t pow = juggler_hash_prefix(
-                full_nonce,
-                (uint8_t *)solution->buckets,
-                sizeof(bucket_t) * J_INPUT_BUCKETS,
-                PURPOSE_PROOFWORK,
-                J_DIFFICULTY_BITS
-            );
+            for (int i = 0; i < J_INPUT_BUCKETS; i++) {
+                blake2b_update(S, (uint8_t *)&buckets[prefixes[i]], sizeof(bucket_t));
+            }
+            blake2b_final(S, (uint8_t *)&pow, sizeof(juint_t));
+            pow = pow & ((1 << J_DIFFICULTY_BITS) - 1);
 
             if (pow == 0) {
+                /* Save the winning buckets in the solution output. */
+                for (int i = 0; i < J_INPUT_BUCKETS; i++) {
+                    memcpy(&solution->buckets[i], &buckets[prefixes[i]], sizeof(bucket_t));
+                }
                 free(buckets);
                 return;
             }
@@ -282,52 +266,39 @@ void juggler_find_solution(const puzzle_t *puzzle, solution_t *solution)
     }
 }
 
-juint_t juggler_hash_prefix(const uint8_t *full_nonce, const uint8_t *msg, size_t len, const char *purpose, size_t bits)
+// XXX: this is no longer the prefix, it's the suffix, but suffix is more
+// efficent!
+juint_t juggler_hash_prefix(const uint8_t *full_nonce, juint_t preimage)
 {
-    uint8_t hash[8];
-    blake2b_state S[1];
-    blake2b_init(S, 8);
-    blake2b_update(S, full_nonce, J_PUZZLE_SIZE + J_EXTRA_NONCE_SIZE);
-    blake2b_update(S, (uint8_t *)purpose, strlen(purpose));
-    blake2b_update(S, msg, len);
-    blake2b_final(S, hash, 8);
-
-    assert(bits <= 64);
-
     juint_t prefix = 0;
 
-    /* Take just as many bytes as we need. */
-    for (int i = 0; i < (bits + 8 - 1) / 8; i++) {
-        prefix <<= 8;
-        prefix ^= hash[i];
-    }
+    blake2b_state S[1];
+    blake2b_init(S, sizeof(juint_t));
+    blake2b_update(S, full_nonce, J_PUZZLE_SIZE + J_EXTRA_NONCE_SIZE);
+    blake2b_update(S, (uint8_t *)PURPOSE_GETPREFIX, strlen(PURPOSE_GETPREFIX));
+    blake2b_update(S, (uint8_t *)&preimage, sizeof(juint_t));
+    blake2b_final(S, (uint8_t *)&prefix, sizeof(juint_t));
 
-    /* Shift out the few extra bits in the last byte. */
-    if (bits % 8 != 0) {
-        prefix = prefix >> (8 - (bits % 8));
-    }
-
-    return prefix;
+    return prefix & ((1 << J_PREFIX_BITS) - 1);
 }
 
 void juggler_select_buckets(const uint8_t *full_nonce, juint_t selector, juint_t *prefixes)
 {
-    // XXX: This can be made more efficient. Instead of calling the hash
-    // function for each one, we can use up all the bits of the hash function to
-    // select multiple prefixes. If we switch to blake2, then we can set the
-    // output length to be just right.
-    uint8_t msg[sizeof(juint_t) + sizeof(juint_t)];
-    memcpy(msg, (uint8_t *)&selector, sizeof(juint_t));
+    blake2b_state S[1];
+
+    /* BLAKE2b can output at most 64 bytes. */
+#if J_INPUT_BUCKETS * JUINT_T_SIZE >= 64
+    #error "There isn't enough available BLAKE2 output to support J_INPUT_BUCKETS."
+#endif
+
+    blake2b_init(S, J_INPUT_BUCKETS * sizeof(juint_t));
+    blake2b_update(S, full_nonce, J_PUZZLE_SIZE + J_EXTRA_NONCE_SIZE);
+    blake2b_update(S, (uint8_t *)PURPOSE_SELECTION, strlen(PURPOSE_SELECTION));
+    blake2b_update(S, (uint8_t *)&selector, sizeof(juint_t));
+    blake2b_final(S, (uint8_t *)prefixes, J_INPUT_BUCKETS * sizeof(juint_t));
 
     for (juint_t i = 0; i < J_INPUT_BUCKETS; i++) {
-        memcpy(msg + sizeof(juint_t), (uint8_t *)&i, sizeof(juint_t));
-        prefixes[i] = juggler_hash_prefix(
-            full_nonce,
-            msg,
-            sizeof(juint_t) + sizeof(juint_t),
-            PURPOSE_SELECTION,
-            J_PREFIX_BITS
-        );
+        prefixes[i] = prefixes[i] & ((1 << J_PREFIX_BITS) - 1);
     }
 }
 

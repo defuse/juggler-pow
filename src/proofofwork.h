@@ -21,11 +21,15 @@
 #define PURPOSE_GETPREFIX "juggler_getprefix"
 #define PURPOSE_PROOFWORK "juggler_proofwork"
 
+// XXX: J_DIFFICULTY_BITS can be independent from J_MEMORY_BITS, and much
+// bigger, but the code uses juint_t for that too.
 #if J_MEMORY_BITS > 30
     #warning "Using an inefficient integer type."
     typedef uint64_t juint_t;
+    #define JUINT_T_SIZE 8
 #else
     typedef uint32_t juint_t;
+    #define JUINT_T_SIZE 4
 #endif
 
 typedef struct Bucket {
@@ -49,7 +53,7 @@ int juggler_check_solution(const puzzle_t *puzzle, const solution_t *solution);
 void juggler_find_solution(const puzzle_t *puzzle, solution_t *solution);
 void juggler_print_solution(solution_t *solution);
 
-juint_t juggler_hash_prefix(const uint8_t *full_nonce, const uint8_t *msg, size_t len, const char *purpose, size_t bits);
+juint_t juggler_hash_prefix(const uint8_t *full_nonce, juint_t preimage);
 void juggler_select_buckets(const uint8_t *full_nonce, juint_t selector, juint_t *prefixes);
 
 #endif
