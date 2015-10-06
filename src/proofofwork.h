@@ -4,13 +4,13 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#define J_PREFIX_BITS 20
+#define J_PREFIX_BITS 19
 #define J_BUCKET_SIZE_BITS 7
 #define J_MEMORY_BITS (J_PREFIX_BITS + J_BUCKET_SIZE_BITS)
 // XXX: This is important for security. Prover can pre-compute the prefixes
 // they'll need to search the PoW space, and only compute those. Thus this is
 // really what sets the memory lower-bound. Find the optimal value!
-#define J_DIFFICULTY_BITS 16
+#define J_DIFFICULTY_BITS (J_MEMORY_BITS - 2)
 // XXX: Should ensure that J_INPUT_BUCKETS and J_PREFIX_BITS are enough to
 // actually solve the J_DIFFICULTY_BITS PoW (larger space = less repeats)
 #define J_INPUT_BUCKETS 4

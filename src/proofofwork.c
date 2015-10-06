@@ -4,9 +4,10 @@
 #include <string.h>
 #include <stdlib.h>
 #include <assert.h>
-#include <openssl/sha.h>
 
 #include "log.h"
+
+#include "BLAKE2/sse/blake2.h"
 
 void juggler_create_puzzle(puzzle_t *puzzle)
 {
@@ -234,6 +235,12 @@ void juggler_find_solution(const puzzle_t *puzzle, solution_t *solution)
             continue;
         }
 
+        /* Set the prefix field to the right value. It is no longer the length. */
+        log_debug("    Restoring the proper value of the prefix fields...");
+        for (juint_t i = 0; i < (1 << J_PREFIX_BITS); i++) {
+            buckets[i].prefix = i;
+        }
+
         /* Find a proof of work solution where the input is buckets. */
         log_debug("    Finding a proof-of-work solution...");
         juint_t prefixes[J_INPUT_BUCKETS];
@@ -243,9 +250,6 @@ void juggler_find_solution(const puzzle_t *puzzle, solution_t *solution)
             /* Create the potential proof-of-work solution (the hash input) */
             for (int i = 0; i < J_INPUT_BUCKETS; i++) {
                 memcpy(&solution->buckets[i], &buckets[prefixes[i]], sizeof(bucket_t));
-                /* Set the prefix to the correct value. Before, we were using it to
-                * store the count. In the hash it should be the prefix. */
-                solution->buckets[i].prefix = prefixes[i];
             }
 
             /* Check if we found a solution to the proof-of-work. */
@@ -275,13 +279,13 @@ void juggler_find_solution(const puzzle_t *puzzle, solution_t *solution)
 
 juint_t juggler_hash_prefix(const uint8_t *full_nonce, const uint8_t *msg, size_t len, const uint8_t *purpose, size_t bits)
 {
-    uint8_t hash[SHA_DIGEST_LENGTH];
-    SHA_CTX sha256;
-    SHA1_Init(&sha256);
-    SHA1_Update(&sha256, full_nonce, J_PUZZLE_SIZE + J_EXTRA_NONCE_SIZE);
-    SHA1_Update(&sha256, purpose, strlen(purpose));
-    SHA1_Update(&sha256, msg, len);
-    SHA1_Final(hash, &sha256);
+    uint8_t hash[8];
+    blake2b_state S[1];
+    blake2b_init(S, 8);
+    blake2b_update(S, full_nonce, J_PUZZLE_SIZE + J_EXTRA_NONCE_SIZE);
+    blake2b_update(S, purpose, strlen(purpose));
+    blake2b_update(S, msg, len);
+    blake2b_final(S, hash, 8);
 
     assert(bits <= 64);
 
