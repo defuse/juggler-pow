@@ -252,7 +252,7 @@ void juggler_find_solution(const puzzle_t *puzzle, solution_t *solution)
 
             if (solution->selector % 100000 == 0) {
                 log_debug(
-                    "    Tried %"JUINT_T_FORMAT" of expected %"JUINT_T_FORMAT" selectors (%2.2f%).",
+                    "    Tried %"JUINT_T_FORMAT" of expected %"JUINT_T_FORMAT" selectors (%2.2f%%).",
                     solution->selector,
                     difficulty,
                     100 * (double)solution->selector / (double)difficulty
