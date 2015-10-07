@@ -33,7 +33,7 @@ int juggler_check_solution(const puzzle_t *puzzle, const solution_t *solution)
     }
 
     /* The proof-of-work input selector must be within range. */
-    if (solution->selector >= ((juint_t)1 << (J_DIFFICULTY_BITS + 1))) {
+    if (solution->selector >= ((juint_t)1 << (J_DIFFICULTY_BITS + 2))) {
         log_debug("    The outer PoW input selector is too big.");
         return 0;
     }
@@ -185,33 +185,27 @@ void juggler_find_solution(const puzzle_t *puzzle, solution_t *solution)
         // XXX: we should probably check index upper bounds.
         log_debug("    Filling the buckets");
         juint_t total_added = 0, prefix;
-        for (
-            juint_t preimage = 0;
-            /* We get to this value of total_added exactly when all buckets are full. */
-            total_added < ((juint_t)1 << (J_PREFIX_BITS + J_BUCKET_SIZE_BITS)) && preimage < ((juint_t)1 << (J_MEMORY_BITS + 1));
-            preimage++
-            ) {
+        /* We get to this value of total_added exactly when all buckets are full. */
+        juint_t total_required = ((juint_t)1 << (J_PREFIX_BITS + J_BUCKET_SIZE_BITS));
+        /* Hard upper bound on the preimage (may cause there to be no solutions). */
+        juint_t max_preimage = ((juint_t)1 << (J_MEMORY_BITS + 1));
+        for (juint_t preimage = 0; total_added < total_required && preimage < max_preimage; preimage++) {
             prefix = juggler_hash_prefix(full_nonce, preimage);
             if (buckets[prefix].prefix < ((juint_t)1 << J_BUCKET_SIZE_BITS)) {
                 total_added += 1;
                 buckets[prefix].indices[buckets[prefix].prefix] = preimage;
                 buckets[prefix].prefix++;
             } else {
-                /* Bucket is already full. Don't store this index anywhere. */
-                // XXX WAIT... an attack:
-                //      Can't the attacker just find one more than necessary for the bucket
-                //      and then permute that in/out with others??
-                //          Fix: We need to make a PRP output on the right number of bits so
-                //          that the number in each bucket is EXACT, i.e. if there are 2^16
-                //          buckets of size 2^10, then the PRP maps [0, 2^26) onto [0, 2^26)
-                //          in a one-to-one, onto, and *hard-to-invert* way.
-                // (An alternate fix is to make the client computationally verify
-                // the exact counts, and always include all of them. But then the
-                // client requires high CPU (but still low memory))
+                /* Bucket is already full. Don't store this preimage anywhere. */
             }
 
-            if (total_added % 100000 == 0) {
-                log_debug("    Added (another) 100000 preimages.");
+            if ((preimage & ((1 << 20) - 1)) == 0) {
+                log_debug(
+                    "    Added %"JUINT_T_FORMAT" of %"JUINT_T_FORMAT" preimages (%2.2f%).",
+                    total_added,
+                    max_preimage,
+                    100 * (double)total_added / (double)total_required
+                );
             }
         }
 
@@ -231,8 +225,9 @@ void juggler_find_solution(const puzzle_t *puzzle, solution_t *solution)
         /* Find a proof of work solution where the input is buckets. */
         log_debug("    Finding a proof-of-work solution...");
         juint_t prefixes[J_INPUT_BUCKETS];
+        juint_t difficulty = (juint_t)1 << J_DIFFICULTY_BITS;
         blake2b_state S[1];
-        for (solution->selector = 0; solution->selector < ((juint_t)1 << (J_DIFFICULTY_BITS + 1)); solution->selector++) {
+        for (solution->selector = 0; solution->selector < ((juint_t)1 << (J_DIFFICULTY_BITS + 2)); solution->selector++) {
             juggler_select_buckets(full_nonce, solution->selector, prefixes);
 
             juint_t pow;
@@ -244,7 +239,7 @@ void juggler_find_solution(const puzzle_t *puzzle, solution_t *solution)
                 blake2b_update(S, (uint8_t *)&buckets[prefixes[i]], sizeof(bucket_t));
             }
             blake2b_final(S, (uint8_t *)&pow, sizeof(juint_t));
-            pow = pow & ((1 << J_DIFFICULTY_BITS) - 1);
+            pow = pow & (difficulty - 1);
 
             if (pow == 0) {
                 /* Save the winning buckets in the solution output. */
@@ -256,7 +251,12 @@ void juggler_find_solution(const puzzle_t *puzzle, solution_t *solution)
             }
 
             if (solution->selector % 100000 == 0) {
-                log_debug("    Tried another 100000 selectors.");
+                log_debug(
+                    "    Tried %"JUINT_T_FORMAT" of expected %"JUINT_T_FORMAT" selectors (%2.2f%).",
+                    solution->selector,
+                    difficulty,
+                    100 * (double)solution->selector / (double)difficulty
+                );
             }
         }
 

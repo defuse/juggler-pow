@@ -3,8 +3,9 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <inttypes.h>
 
-#define J_PREFIX_BITS 21
+#define J_PREFIX_BITS 20
 #define J_BUCKET_SIZE_BITS 6
 #define J_MEMORY_BITS (J_PREFIX_BITS + J_BUCKET_SIZE_BITS)
 // XXX: This is important for security. Prover can pre-compute the prefixes
@@ -27,9 +28,11 @@
     #warning "Using an inefficient integer type."
     typedef uint64_t juint_t;
     #define JUINT_T_SIZE 8
+    #define JUINT_T_FORMAT PRIu64
 #else
     typedef uint32_t juint_t;
     #define JUINT_T_SIZE 4
+    #define JUINT_T_FORMAT PRIu32
 #endif
 
 typedef struct Bucket {

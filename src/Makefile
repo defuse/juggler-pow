@@ -1,6 +1,6 @@
 all: juggler
 
-CFLAGS = -std=c99 -Wall -pedantic -march=native -I./BLAKE2/sse
+CFLAGS = -std=c99 -Wall -pedantic -march=native -I./BLAKE2/sse -DLOGLEVEL=2
 
 BLAKE2_FILES=BLAKE2/sse/blake2b.c BLAKE2/sse/blake2s.c
 
