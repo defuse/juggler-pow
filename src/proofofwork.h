@@ -25,10 +25,10 @@
 // XXX: J_DIFFICULTY_BITS can be independent from J_MEMORY_BITS, and much
 // bigger, but the code uses juint_t for that too.
 
-/* It's not safe to go up to 2^32, because we would be computing 1 << 32 in some
- * places, which is undefined. TODO: Rewrite the code so that we can go all the
- * way up to 32 bits. */
-#if J_MEMORY_BITS > 31
+/* It's not safe to go up to 2^31, because we would be computing 1 << 32 in some
+ * places (we add 1 to J_DIFFICULTY_BITS to get 32), which is undefined. TODO:
+ * Rewrite the code so that we can go all the way up to 31 bits. */
+#if J_MEMORY_BITS > 30
     #warning "Using an inefficient integer type."
     typedef uint64_t juint_t;
     #define JUINT_T_SIZE 8
