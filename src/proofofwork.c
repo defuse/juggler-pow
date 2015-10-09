@@ -107,7 +107,12 @@ int juggler_check_solution(const puzzle_t *puzzle, const solution_t *solution)
 
         for (int i = 0; i < J_INPUT_BUCKETS; i++) {
             if (prefix == solution->buckets[i].prefix) {
-                /* It must be either in the list, or greater than the last one. */
+                /* Must be either greater than the last element of the list, or
+                 * in the list. This guarantees we've found the first (lowest)
+                 * 2^J_BUCKET_SIZE_BITS preimages. */
+                if (preimage > solution->buckets[i].indices[((juint_t)1 << J_BUCKET_SIZE_BITS) - 1]) {
+                    break;
+                }
                 int valid = 0;
                 juint_t j = 0;
                 for (; j < ((juint_t)1 << J_BUCKET_SIZE_BITS); j++) {
@@ -116,7 +121,6 @@ int juggler_check_solution(const puzzle_t *puzzle, const solution_t *solution)
                         break;
                     }
                 }
-                valid |= preimage > solution->buckets[i].indices[j-1];
                 if (!valid) {
                     log_debug("    Preimage selection trickery!");
                     return 0;
@@ -266,8 +270,6 @@ void juggler_find_solution(const puzzle_t *puzzle, solution_t *solution)
     }
 }
 
-// XXX: this is no longer the prefix, it's the suffix, but suffix is more
-// efficent!
 juint_t juggler_hash_prefix(const uint8_t *full_nonce, juint_t preimage)
 {
     juint_t prefix = 0;
