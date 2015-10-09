@@ -5,7 +5,7 @@
 #include <stddef.h>
 #include <inttypes.h>
 
-#define J_PREFIX_BITS 20
+#define J_PREFIX_BITS 21
 #define J_BUCKET_SIZE_BITS 6
 #define J_MEMORY_BITS (J_PREFIX_BITS + J_BUCKET_SIZE_BITS)
 // XXX: This is important for security. Prover can pre-compute the prefixes
@@ -62,5 +62,9 @@ void juggler_print_solution(solution_t *solution);
 
 juint_t juggler_hash_prefix(const uint8_t *full_nonce, juint_t preimage);
 void juggler_select_buckets(const uint8_t *full_nonce, juint_t selector, juint_t *prefixes);
+
+void bucket_init(bucket_t *bucket);
+void bucket_update(bucket_t *bucket, juint_t item);
+void bucket_final(bucket_t *bucket, juint_t prefix);
 
 #endif

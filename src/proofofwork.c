@@ -54,81 +54,35 @@ int juggler_check_solution(const puzzle_t *puzzle, const solution_t *solution)
         }
     }
 
-    /* Check that each bucket is valid. */
+    /* Check that each bucket is valid by recomputing it. */
+    bucket_t check_buckets[J_INPUT_BUCKETS];
+
+    /* Initialize the check buckets. */
     for (int i = 0; i < J_INPUT_BUCKETS; i++) {
-        for (int j = 0; j < ((juint_t)1 << J_BUCKET_SIZE_BITS); j++) {
-            /* Check that the hash actually starts with this bucket's prefix. */
-            juint_t prefix = juggler_hash_prefix(full_nonce, solution->buckets[i].indices[j]);
-
-            if (prefix != solution->buckets[i].prefix) {
-                log_debug("    Element in a bucket does not have its prefix.");
-                return 0;
-            }
-
-            /* Make sure the indices are in strictly ascending order. Without
-             * this check, the prover could simply iterate through the
-             * permutations of indices inside one bucket. */
-            if (j > 0) {
-                /* This also makes sure the indices are unique. */
-                if (solution->buckets[i].indices[j] <= solution->buckets[i].indices[j-1]) {
-                    log_debug("    Bucket indices aren't in strictly ascending order.");
-                    return 0;
-                }
-            }
-        }
+        bucket_init(&check_buckets[i]);
     }
 
-    /* Check that the preimage indices were unambiguously chosen. */
-    /* Unfortunately, this CPU-expensive operation is required to prevent an
-     * attack (see one of the XXX coments in the solver code). */
-    log_debug("    Looking for preimage selection trickery...");
-
-    /* Calculate the maximum preimage, so we can stop checking ASAP. */
-    /* Since we're computing the maximum from untrusted data, it's important
-     * that this step come *after* the one above. Otherwise, the prover could
-     * DoS this code by specifying an insanely-high maximum value. XXX: But
-     * could the prover just offset all their indices by some constant value to
-     * force us to do more work here? */
-    juint_t max_preimage = 0;
-    for (int i = 0; i < J_INPUT_BUCKETS; i++) {
-        for (int j = 0; j < ((juint_t)1 << J_BUCKET_SIZE_BITS); j++) {
-            if (solution->buckets[i].indices[j] > max_preimage) {
-                max_preimage = solution->buckets[i].indices[j];
-            }
-        }
-    }
-
-    for (juint_t preimage = 0; preimage <= max_preimage; preimage++) {
-        juint_t prefix = juggler_hash_prefix(full_nonce, preimage);
-
-        // Don't bother optimizing the following loop. The hashing is the
-        // bottleneck. Commenting out the code below doesn't appear to even
-        // affect the performance.
-
+    /* Re-compute the check buckets. */
+    juint_t max_preimage = ((juint_t)1 << (J_MEMORY_BITS));
+    juint_t prefix;
+    for (juint_t preimage = 0; preimage < max_preimage; preimage++) {
+        prefix = juggler_hash_prefix(full_nonce, preimage);
         for (int i = 0; i < J_INPUT_BUCKETS; i++) {
             if (prefix == solution->buckets[i].prefix) {
-                /* Must be either greater than the last element of the list, or
-                 * in the list. This guarantees we've found the first (lowest)
-                 * 2^J_BUCKET_SIZE_BITS preimages. */
-                if (preimage > solution->buckets[i].indices[((juint_t)1 << J_BUCKET_SIZE_BITS) - 1]) {
-                    break;
-                }
-                int valid = 0;
-                juint_t j = 0;
-                for (; j < ((juint_t)1 << J_BUCKET_SIZE_BITS); j++) {
-                    if (solution->buckets[i].indices[j] == preimage) {
-                        valid = 1;
-                        break;
-                    }
-                }
-                if (!valid) {
-                    log_debug("    Preimage selection trickery!");
-                    return 0;
-                }
+                bucket_update(&check_buckets[i], preimage);
                 break;
             }
         }
+    }
 
+    /* Finalize the check buckets. */
+    for (int i = 0; i < J_INPUT_BUCKETS; i++) {
+        bucket_final(&check_buckets[i], solution->buckets[i].prefix);
+    }
+
+    /* Make sure the result is the same. */
+    if (memcmp(check_buckets, solution->buckets, sizeof(bucket_t) * J_INPUT_BUCKETS) != 0) {
+        log_fatal("Re-computed buckets don't match!");
     }
 
     /* Check that the buckets are a solution to the proof-of-work. */
@@ -176,54 +130,31 @@ void juggler_find_solution(const puzzle_t *puzzle, solution_t *solution)
         memcpy(full_nonce, solution->puzzle, J_PUZZLE_SIZE);
         memcpy(full_nonce + J_PUZZLE_SIZE, (uint8_t *)&solution->extra_nonce, J_EXTRA_NONCE_SIZE);
 
-        /* Set all of the buckets to empty.
-         * NOTE: We're re-using the 'prefix' field of bucket as the current number
-         * of elements in the bucket. The bucket's prefix is the same as its index
-         * in the array. */
-        log_debug("    Initializing bucket element counts...");
+        log_debug("    Initializing buckets...");
         for (juint_t i = 0; i < ((juint_t)1 << J_PREFIX_BITS); i++) {
-            buckets[i].prefix = 0;
+            bucket_init(&buckets[i]);
         }
 
         /* Fill the buckets. */
-        // XXX: we should probably check index upper bounds.
-        log_debug("    Filling the buckets");
-        juint_t total_added = 0, prefix;
-        /* We get to this value of total_added exactly when all buckets are full. */
-        juint_t total_required = ((juint_t)1 << (J_PREFIX_BITS + J_BUCKET_SIZE_BITS));
-        /* Hard upper bound on the preimage (may cause there to be no solutions). */
-        juint_t max_preimage = ((juint_t)1 << (J_MEMORY_BITS + 1));
-        for (juint_t preimage = 0; total_added < total_required && preimage < max_preimage; preimage++) {
+        log_debug("    Filling the buckets...");
+        juint_t max_preimage = ((juint_t)1 << (J_MEMORY_BITS));
+        juint_t prefix;
+        for (juint_t preimage = 0; preimage < max_preimage; preimage++) {
             prefix = juggler_hash_prefix(full_nonce, preimage);
-            if (buckets[prefix].prefix < ((juint_t)1 << J_BUCKET_SIZE_BITS)) {
-                total_added += 1;
-                buckets[prefix].indices[buckets[prefix].prefix] = preimage;
-                buckets[prefix].prefix++;
-            } else {
-                /* Bucket is already full. Don't store this preimage anywhere. */
-            }
-
+            bucket_update(&buckets[prefix], preimage);
             if ((preimage & ((1 << 20) - 1)) == 0) {
                 log_debug(
                     "    Added %"JUINT_T_FORMAT" of %"JUINT_T_FORMAT" preimages (%2.2f%).",
-                    total_added,
+                    preimage,
                     max_preimage,
-                    100 * (double)total_added / (double)total_required
+                    100 * (double)preimage / (double)max_preimage
                 );
             }
         }
 
-        if (total_added != ((juint_t)1 << (J_PREFIX_BITS + J_BUCKET_SIZE_BITS))) {
-            log_debug("Didn't fill all of the buckets.");
-            /* Unlucky! Try again with the next extra nonce. */
-            solution->extra_nonce++;
-            continue;
-        }
-
-        /* Set the prefix field to the right value. It is no longer the length. */
-        log_debug("    Restoring the proper value of the prefix fields...");
+        log_debug("    Finalizing the buckets...");
         for (juint_t i = 0; i < (1 << J_PREFIX_BITS); i++) {
-            buckets[i].prefix = i;
+            bucket_final(&buckets[i], i);
         }
 
         /* Find a proof of work solution where the input is buckets. */
@@ -310,4 +241,22 @@ void juggler_print_solution(solution_t *solution)
         printf("%02x", ((uint8_t *)solution)[i]);
     }
     printf("\n");
+}
+
+void bucket_init(bucket_t *bucket)
+{
+    /* Initialize prefix (which is actually the count) and all elements to 0. */
+    memset(bucket, 0, sizeof(bucket_t));
+}
+
+void bucket_update(bucket_t *bucket, juint_t item)
+{
+#define BUCKET_INDEX_MASK (((juint_t)1 << J_BUCKET_SIZE_BITS) - 1)
+    bucket->indices[bucket->prefix & BUCKET_INDEX_MASK] ^= item;
+    bucket->prefix++;
+}
+
+void bucket_final(bucket_t *bucket, juint_t prefix)
+{
+    bucket->prefix = prefix;
 }
